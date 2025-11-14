@@ -153,20 +153,26 @@ async def list_words(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # -----------------------------------------
 # Main
 # -----------------------------------------
-
 def main():
-    scheduler.start()
-
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
+    # Handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("list", list_words))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, save_word))
     app.add_handler(CallbackQueryHandler(button_handler))
+
+    # Start scheduler AFTER the bot starts
+    async def on_startup(app):
+        scheduler.start()
+        print("Scheduler started successfully!")
+
+    app.post_init = on_startup
 
     app.run_polling()
 
 
 if __name__ == "__main__":
     main()
+
 
