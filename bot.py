@@ -11,12 +11,14 @@ from telegram.ext import (
     filters
 )
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+import os
 
 # -----------------------------------------
 # Setup
 # -----------------------------------------
 
-BOT_TOKEN = "8201765784:AAGBY0bAs6SXrYI4_LjN7SYYYwqDPbPE4no"
+BOT_TOKEN = os.getenv("BOT_TOKEN")   # ← IMPORTANT FOR RENDER
+
 db = TinyDB("database.json")
 Word = Query()
 
@@ -30,11 +32,10 @@ scheduler = AsyncIOScheduler()
 # -----------------------------------------
 
 async def schedule_reminders(app, user_id, word, definition):
-    # intervals in hours
     intervals = [
         ("24h", 24),
         ("3d", 72),
-        ("7d", 168),
+        ("7d", 168)
     ]
 
     for tag, hours in intervals:
@@ -49,13 +50,15 @@ async def schedule_reminders(app, user_id, word, definition):
 
 
 async def send_reminder(app, user_id, word, definition):
-    keyboard = InlineKeyboardMarkup([[
-        InlineKeyboardButton("✅ I remember", callback_data=f"remember|{word}"),
-        InlineKeyboardButton("❌ I forgot", callback_data=f"forgot|{word}")
-    ]])
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("✅ I remember", callback_data=f"remember|{word}"),
+            InlineKeyboardButton("❌ I forgot", callback_data=f"forgot|{word}")
+        ]
+    ])
 
     text = (
-        f"🔔 *Review your word!*\n\n"
+        f"🔔 *Review your word!* \n\n"
         f"📘 *Word:* {word}\n"
         f"📖 *Definition:* ||{definition}||"
     )
@@ -69,28 +72,27 @@ async def send_reminder(app, user_id, word, definition):
 
 
 # -----------------------------------------
-# /start command
+# /start
 # -----------------------------------------
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Hello! Send me English vocabulary like this:\n\n"
-        "`word: exhilarate`\n"
-        "`definition: to make someone feel very happy`\n\n"
-        "I will remind you in 24h, 3 days, and 1 week!",
+        "Hello! Send me vocabulary like this:\n\n"
+        "`word: exhilarate\n"
+        "definition: to make someone feel very happy`\n",
         parse_mode="Markdown"
     )
 
 
 # -----------------------------------------
-# Save vocabulary
+# Save vocabs
 # -----------------------------------------
 
 async def save_word(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
 
     if "word:" not in text or "definition:" not in text:
-        await update.message.reply_text("Please send like:\nword: ...\ndefinition: ...")
+        await update.message.reply_text("Format:\nword: ...\ndefinition: ...")
         return
 
     lines = text.split("\n")
@@ -103,16 +105,13 @@ async def save_word(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "definition": definition
     })
 
-    await update.message.reply_text(
-        f"Saved! I'll remind you about *{word}* soon.",
-        parse_mode="Markdown"
-    )
+    await update.message.reply_text(f"Saved! I'll remind you about *{word}*.", parse_mode="Markdown")
 
     await schedule_reminders(context.application, update.message.chat_id, word, definition)
 
 
 # -----------------------------------------
-# Button handler
+# Reminder button handler
 # -----------------------------------------
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -122,23 +121,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     action, word = query.data.split("|")
 
     if action == "remember":
-        await query.edit_message_text(
-            f"Great! You remembered *{word}* 🎉",
-            parse_mode="Markdown"
-        )
+        await query.edit_message_text(f"Nice! You remembered *{word}* 🎉", parse_mode="Markdown")
+
     else:
-        await query.edit_message_text(
-            "Don't worry — I'll remind you again later 💪"
-        )
+        await query.edit_message_text("No worries, I’ll remind you again 💪")
 
         entry = db.get((Word.word == word) & (Word.user_id == query.from_user.id))
         if entry:
-            await schedule_reminders(
-                context.application,
-                query.from_user.id,
-                word,
-                entry["definition"]
-            )
+            await schedule_reminders(context.application, query.from_user.id, word, entry["definition"])
 
 
 # -----------------------------------------
@@ -150,15 +140,14 @@ async def list_words(update: Update, context: ContextTypes.DEFAULT_TYPE):
     entries = db.search(Word.user_id == user_id)
 
     if not entries:
-        await update.message.reply_text("You haven't added any words yet.")
+        await update.message.reply_text("You don’t have any saved words yet.")
         return
 
-    text = "📚 *Your learned words:*\n\n"
+    msg = "📚 *Your saved words:*\n\n"
+    for e in entries:
+        msg += f"• *{e['word']}* — {e['definition']}\n"
 
-    for entry in entries:
-        text += f"• *{entry['word']}* — ||{entry['definition']}||\n"
-
-    await update.message.reply_text(text, parse_mode="MarkdownV2")
+    await update.message.reply_text(msg, parse_mode="Markdown")
 
 
 # -----------------------------------------
@@ -166,19 +155,14 @@ async def list_words(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # -----------------------------------------
 
 def main():
+    scheduler.start()
+
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # Handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("list", list_words))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, save_word))
     app.add_handler(CallbackQueryHandler(button_handler))
-
-    # Start APScheduler AFTER event loop exists
-    async def on_startup(app):
-        scheduler.start()
-
-    app.post_init(on_startup)
 
     app.run_polling()
 
