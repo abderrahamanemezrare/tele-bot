@@ -17,7 +17,7 @@ import os
 # Setup
 # -----------------------------------------
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")   # ← IMPORTANT FOR RENDER
+BOT_TOKEN = os.getenv("8201765784:AAGBY0bAs6SXrYI4_LjN7SYYYwqDPbPE4no")   # ← IMPORTANT FOR RENDER
 
 db = TinyDB("database.json")
 Word = Query()
@@ -169,3 +169,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
